@@ -1,6 +1,6 @@
 # ════════════════════════════════════════════════════════════════════
-# Shayak — single-container build (nginx + FastAPI + PostgreSQL 16)
-# Build context: repository root.   Target size: well under 400 MB.
+# Shayak — single-container build (nginx + FastAPI, database on Supabase)
+# Build context: repository root.   Small Alpine image.
 #   docker build -t shayak .
 # ════════════════════════════════════════════════════════════════════
 
@@ -22,13 +22,12 @@ RUN sed 's/uvicorn\[standard\]/uvicorn/' /tmp/requirements.txt > /tmp/req.slim.t
 # ── Stage 2: runtime ────────────────────────────────────────────────
 FROM alpine:3.20
 
-RUN apk add --no-cache python3 postgresql16 nginx su-exec && \
-    rm -rf /usr/share/postgresql16/man /usr/share/doc /usr/share/man /var/cache/apk/* && \
+RUN apk add --no-cache python3 nginx su-exec && \
+    rm -rf /usr/share/doc /usr/share/man /var/cache/apk/* && \
     adduser -D -H -s /sbin/nologin appuser
 
 COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH" \
-    PGDATA=/var/lib/postgresql/data \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
@@ -43,14 +42,12 @@ RUN sed -e 's#server backend:8000;#server 127.0.0.1:8000;#' \
         -e 's#error_log .*;#error_log /dev/stderr warn;#' \
         -e 's#access_log .*;#access_log /dev/stdout main;#' \
         /usr/share/nginx/html/nginx.conf > /etc/nginx/nginx.conf && \
-    rm -f /usr/share/nginx/html/nginx.conf /usr/share/nginx/html/Dockerfile
+    rm -f /usr/share/nginx/html/nginx.conf
 
-# DB schema + entrypoint
-COPY db/init.sql /docker-entrypoint-initdb.d/init.sql
+# Entrypoint
 COPY docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-VOLUME /var/lib/postgresql/data
 EXPOSE 80 10000
 
 HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=3 \

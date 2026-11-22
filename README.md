@@ -1,158 +1,57 @@
 # Shayak AI Control Layer
 
-## Project Structure
+One Docker image: **nginx** (static film + reverse proxy) and **FastAPI** (waitlist API).
+The database is **Supabase** (Postgres) — nothing database-related runs in the container.
 
 ```
-Shayak AI Control Layer/
-│
-├── frontend/                   ← Static film assets served by Nginx
-│   ├── Shayak Film.dc.html     ← Entry point HTML
-│   ├── shayak-film.jsx         ← Main film + live waitlist form
-│   ├── animations-v3.jsx
-│   ├── tweaks-panel.jsx
-│   ├── support.js
-│   ├── _ds/                    ← Design system bundle
-│   ├── nginx.conf              ← Nginx config (static + proxy)
-│   └── Dockerfile              ← Builds Nginx image
-│
-├── backend/                    ← Python FastAPI REST API
-│   ├── main.py                 ← All routes (waitlist, health)
-│   ├── requirements.txt
-│   └── Dockerfile              ← Builds FastAPI image
-│
-├── db/
-│   └── init.sql                ← Postgres schema (runs on first boot)
-│
-├── docker-compose.yml          ← Builds & runs all three services
-├── .env.example                ← Copy to .env before running
-├── .gitignore
-└── README.md
+frontend/        static film assets (served by nginx); nginx.conf
+backend/main.py  FastAPI routes: waitlist, health
+db/supabase.sql  schema (run once in Supabase SQL Editor)
+docker/          entrypoint.sh
+Dockerfile       single image
+render.yaml      Render blueprint
+scripts/         push_to_github.sh, apply_supabase_schema.py
 ```
 
-## Stack
+## Setup
 
-| Layer    | Technology                        |
-|----------|-----------------------------------|
-| Frontend | Static HTML/JSX · Nginx 1.27      |
-| Backend  | Python 3.12 · FastAPI · Uvicorn   |
-| Database | PostgreSQL 16                     |
-| Containers | Docker · Docker Compose         |
+1. **Schema:** Supabase → SQL Editor → paste `db/supabase.sql` → Run.
+2. **Connection string:** Supabase → Connect → **Session pooler** URI
+   (`postgresql://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres`).
+   Use the pooler, not the Direct connection (IPv6-only; Render free is IPv4).
+   URL-encode special characters in the password (`@` → `%40`).
 
----
+## Deploy on Render (free)
 
-## Quick Start
+1. Render → New → Blueprint → select this repo (`render.yaml`).
+2. Environment variables:
+   - `DATABASE_URL` — the Session pooler URI above (**required**; the container exits without it)
+   - `CORS_ORIGINS` — `*` or your site URL
+   - `ADMIN_API_KEY` — generated for you; `ENV=production` is preset
+3. The free service sleeps after ~15 min idle (slow first request); data lives in Supabase.
+
+## Run locally
 
 ```bash
-# 1. Configure environment
-cp .env.example .env
-#    → set a strong POSTGRES_PASSWORD
-
-# 2. Build and run all three services
-docker compose up --build -d
-
-# 3. Open the film in your browser
+cp .env.example .env            # set ADMIN_API_KEY
+DATABASE_URL='postgresql://...pooler.supabase.com:5432/postgres' \
+  docker compose -f docker-compose.single.yml up --build
 open http://localhost
 ```
 
-Startup order is enforced automatically:
-**db** (healthy) → **backend** (healthy) → **frontend**
+## API
 
----
+| Method | Path                  | Description                      |
+|--------|-----------------------|----------------------------------|
+| POST   | `/api/waitlist`       | Register an email (5/min per IP) |
+| GET    | `/api/waitlist`       | List entries — `X-API-Key` required |
+| GET    | `/api/waitlist/count` | Signup count — `X-API-Key` required |
+| GET    | `/health`             | DB health check                  |
 
-## API Endpoints
+Docs at `/docs` are disabled when `ENV=production`.
 
-| Method | Path                   | Description              |
-|--------|------------------------|--------------------------|
-| `POST` | `/api/waitlist`        | Register an email        |
-| `GET`  | `/api/waitlist`        | List all entries (admin) |
-| `GET`  | `/api/waitlist/count`  | Total signup count       |
-| `GET`  | `/health`              | DB health check          |
+## Security notes
 
-**Interactive docs:** `http://localhost:8000/docs`
-
-```bash
-# Register an email
-curl -X POST http://localhost/api/waitlist \
-  -H "Content-Type: application/json" \
-  -d '{"email": "hello@company.com"}'
-
-# Check total signups
-curl http://localhost/api/waitlist/count
-```
-
----
-
-## Single-container mode (< 400 MB)
-
-nginx, FastAPI and PostgreSQL 16 can run in one Alpine-based image
-(`Dockerfile` at the repo root, entrypoint in `docker/entrypoint.sh`):
-
-```bash
-cp .env.example .env            # set POSTGRES_PASSWORD, ADMIN_API_KEY
-docker compose -f docker-compose.single.yml up --build -d
-docker images shayak            # check the size
-```
-
-Data lives in the `postgres_data` volume. If any of the three processes
-dies, the container exits and `restart: unless-stopped` restarts it.
-
----
-
-## Deploy on Render (free) with Supabase
-
-Render's free tier has no persistent disk, so the database lives on Supabase
-and the container runs only nginx + FastAPI (when `DATABASE_URL` is set the
-built-in Postgres is skipped).
-
-1. Supabase → **Connect** → copy the **Session pooler** URI
-   (`...pooler.supabase.com:5432`). Use the pooler, not the "Direct connection":
-   Render's free tier is IPv4-only and the direct host is IPv6-only.
-2. Render → **New → Blueprint** → select this repo (uses `render.yaml`).
-3. Set env vars: `DATABASE_URL` (the URI above, with your DB password) and
-   `CORS_ORIGINS` (your Render URL). `ADMIN_API_KEY` is generated for you.
-
-The `waitlist` table is created automatically on startup. The free service
-sleeps after ~15 min idle, so the first request after that is slow.
-
----
-
-## Useful Commands
-
-```bash
-# Follow live logs for all services
-docker compose logs -f
-
-# Restart just one service
-docker compose restart backend
-
-# Connect to Postgres directly
-docker exec -it shayak_db psql -U shayak -d shayak_waitlist
-
-# Stop everything (keeps data volume)
-docker compose down
-
-# Stop and wipe all data (destructive!)
-docker compose down -v
-```
-
----
-
-## Database Schema
-
-```sql
-CREATE TABLE waitlist (
-    id         SERIAL PRIMARY KEY,
-    email      VARCHAR(255) NOT NULL UNIQUE,
-    created_at TIMESTAMPTZ  NOT NULL DEFAULT NOW()
-);
-```
-
----
-
-## Production Checklist
-
-- [ ] Set a strong `POSTGRES_PASSWORD` in `.env`
-- [ ] Set `CORS_ORIGINS` to your actual domain (not `*`)
-- [ ] Restrict `GET /api/waitlist` with an API key or private network rule
-- [ ] Add TLS (Certbot / Cloudflare) in front of Nginx on port 443
-- [ ] Configure Docker log rotation
+- The `waitlist` table has Row Level Security on and no policies, so the Supabase
+  publishable/anon key cannot read emails. The backend connects as `postgres`.
+- Keep real keys in `.env` / Render only. `.env` is gitignored.

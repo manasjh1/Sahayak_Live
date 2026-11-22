@@ -1,6 +1,6 @@
 """
 Shayak AI Control Layer — Waitlist API
-FastAPI + PostgreSQL · Strict CORS · Security headers · Rate limiting
+FastAPI + Supabase (Postgres) · Strict CORS · Security headers · Rate limiting
 All HIGH/CRITICAL security issues resolved.
 """
 
