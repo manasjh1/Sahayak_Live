@@ -1,10 +1,10 @@
 # Shayak AI Control Layer
 
-One Docker image: **nginx** (static film + reverse proxy) and **FastAPI** (waitlist API).
+One Docker image, one process: **FastAPI** serves the waitlist API and the static film.
 The database is **Supabase** (Postgres) — nothing database-related runs in the container.
 
 ```
-frontend/        static film assets (served by nginx); nginx.conf
+frontend/        static film assets (served by FastAPI)
 backend/main.py  FastAPI routes: waitlist, health
 db/supabase.sql  schema (run once in Supabase SQL Editor)
 docker/          entrypoint.sh

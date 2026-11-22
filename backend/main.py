@@ -6,7 +6,9 @@ All HIGH/CRITICAL security issues resolved.
 
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
+from pathlib import Path
 from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, EmailStr, field_validator
@@ -25,6 +27,8 @@ from sqlalchemy.engine import make_url
 import os
 import re
 import secrets
+import base64
+import hashlib
 import logging
 
 # ── logging ──────────────────────────────────────────────────────────
@@ -167,6 +171,20 @@ app.add_middleware(
 
 
 # ── Security headers ───────────────────────────────────────────────────
+FRONTEND_CSP = (
+    "default-src 'self'; "
+    "script-src 'self' 'unsafe-eval' https://fonts.googleapis.com https://unpkg.com; "
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+    "font-src 'self' https://fonts.gstatic.com; "
+    "img-src 'self' data:; connect-src 'self'; "
+    "frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+)
+
+
+def _is_api_path(path: str) -> bool:
+    return path.startswith(("/api/", "/health", "/docs", "/redoc", "/openapi.json"))
+
+
 # HIGH FIX #5: Add Content-Security-Policy + complete header set
 @app.middleware("http")
 async def security_headers(request: Request, call_next):
@@ -181,11 +199,20 @@ async def security_headers(request: Request, call_next):
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     # Restrict browser features
     response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
-    # No caching of API responses
-    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
-    response.headers["Pragma"] = "no-cache"
-    # HIGH FIX #5a: Content-Security-Policy — API only serves JSON, no HTML
-    response.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'"
+    path = request.url.path
+    if _is_api_path(path):
+        # No caching of API responses
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        # API only serves JSON — lock CSP down completely
+        response.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'"
+    else:
+        # Frontend (film): same policy nginx used to send
+        response.headers["Content-Security-Policy"] = FRONTEND_CSP
+        if path == "/" or path.endswith(".html"):
+            response.headers["Cache-Control"] = "no-cache"
+        elif response.status_code == 200:
+            response.headers["Cache-Control"] = "public, max-age=604800"
     # HSTS only in production (requires HTTPS)
     if ENV == "production":
         response.headers["Strict-Transport-Security"] = (
@@ -337,3 +364,28 @@ async def waitlist_count(request: Request):
     async with AsyncSessionLocal() as session:
         result = await session.execute(select(func.count(WaitlistEntry.id)))
         return {"count": result.scalar_one()}
+
+
+# ── Frontend (static film) ────────────────────────────────────────────
+# Served by FastAPI itself — no nginx. Registered last so /api and /health win.
+STATIC_DIR = Path(os.environ.get("STATIC_DIR", Path(__file__).resolve().parent / "static"))
+INDEX_FILE = "Shayak Film.dc.html"
+
+if (STATIC_DIR / INDEX_FILE).is_file():
+    # Allow exactly the page's own inline <script> blocks (by hash) — nothing else inline.
+    _html = (STATIC_DIR / INDEX_FILE).read_text(encoding="utf-8")
+    _hashes = " ".join(
+        "'sha256-%s'" % base64.b64encode(hashlib.sha256(m.encode("utf-8")).digest()).decode()
+        for m in re.findall(r"<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>", _html, re.S)
+    )
+    if _hashes:
+        FRONTEND_CSP = FRONTEND_CSP.replace("script-src 'self'", f"script-src 'self' {_hashes}", 1)
+
+    @app.get("/", include_in_schema=False)
+    async def index():
+        return FileResponse(STATIC_DIR / INDEX_FILE, media_type="text/html")
+
+    app.mount("/", StaticFiles(directory=STATIC_DIR), name="static")
+    log.info("Serving frontend from %s", STATIC_DIR)
+else:
+    log.warning("Frontend not found at %s — serving API only", STATIC_DIR)

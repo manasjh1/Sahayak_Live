@@ -1,44 +1,24 @@
 #!/bin/sh
-# Starts FastAPI + nginx. The database is external (Supabase): DATABASE_URL is required.
-# If either process dies, the container exits so the platform restarts it.
+# Runs FastAPI (API + static film) on 0.0.0.0:$PORT. Database is Supabase.
 set -eu
 
 : "${ENV:=development}"
 : "${CORS_ORIGINS:=*}"
-: "${PORT:=80}"
+: "${PORT:=10000}"          # Render sets PORT (default 10000)
 export ENV CORS_ORIGINS
 
 if [ -z "${DATABASE_URL:-}" ]; then
   echo "ERROR: DATABASE_URL is not set." >&2
-  echo "Set it to your Supabase Session pooler URI (Supabase -> Connect -> Session pooler)." >&2
+  echo "Set it to your Supabase pooler URI (Supabase -> Connect)." >&2
   exit 1
 fi
 export DATABASE_URL
 
-# nginx is the public listener: 0.0.0.0:$PORT (Render sets PORT, default 10000)
-sed -i -E "s/listen[[:space:]]+[0-9.:]*[0-9]+;/listen 0.0.0.0:${PORT};/" /etc/nginx/nginx.conf
-echo "nginx: $(grep -E '^[[:space:]]*listen' /etc/nginx/nginx.conf | tr -s ' ')"
-nginx -t || { echo "ERROR: nginx config test failed" >&2; exit 1; }
-
-nginx -g 'daemon off;' &
-NGINX_PID=$!
-echo "nginx started on 0.0.0.0:${PORT} (pid $NGINX_PID)"
-
+echo "Starting on 0.0.0.0:${PORT}"
 cd /app
-su-exec appuser uvicorn main:app --host 127.0.0.1 --port 8000 --workers 1 --no-server-header &
-API_PID=$!
-
-stop_all() {
-  kill -TERM "$NGINX_PID" "$API_PID" 2>/dev/null || true
-  wait 2>/dev/null || true
-}
-trap 'stop_all; exit 0' TERM INT
-
-while kill -0 "$API_PID" 2>/dev/null && kill -0 "$NGINX_PID" 2>/dev/null; do
-  sleep 2 &
-  wait $! || true
-done
-
-echo "A service exited unexpectedly — stopping container" >&2
-stop_all
-exit 1
+# --proxy-headers: take the client IP from Render's X-Forwarded-For so rate
+# limiting is per visitor, not per proxy.
+exec su-exec appuser uvicorn main:app \
+  --host 0.0.0.0 --port "${PORT}" --workers 1 \
+  --proxy-headers --forwarded-allow-ips='*' \
+  --no-server-header
