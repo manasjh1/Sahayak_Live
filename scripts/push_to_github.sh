@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # One-time push of this repo to a GitHub account that is NOT connected on this machine.
 #
-#   ./scripts/push_to_github.sh
+#   ./scripts/push_to_github.sh            # normal push (fails if remote has other work)
+#   ./scripts/push_to_github.sh --force    # OVERWRITE the remote branch with this repo
 #
 # - Prompts for the target repo, GitHub username and a personal access token.
 # - The token is read silently, handed to git through a temporary askpass helper,
@@ -14,6 +15,9 @@
 # "repo" scope (classic) or "Contents: read/write" on that repo (fine-grained).
 
 set -euo pipefail
+
+FORCE=0
+[ "${1:-}" = "--force" ] && FORCE=1
 
 cd "$(git rev-parse --show-toplevel)"
 
@@ -54,8 +58,16 @@ echo
 echo "About to push:"
 echo "  from : $(pwd) ($BRANCH, $(git rev-list --count HEAD) commit(s))"
 echo "  to   : $URL  ($REMOTE_BRANCH)"
-read -r -p "Proceed? [y/N] " go
-[ "${go:-N}" = "y" ] || [ "${go:-N}" = "Y" ] || { echo "Aborted."; exit 1; }
+if [ "$FORCE" = 1 ]; then
+  echo
+  echo "!! FORCE MODE: the existing '$REMOTE_BRANCH' branch on $TARGET will be"
+  echo "!! permanently replaced. Its current commits will be lost."
+  read -r -p "Type the target repo name ($TARGET) to confirm: " confirm
+  [ "$confirm" = "${TARGET%.git}" ] || { echo "Did not match. Aborted."; exit 1; }
+else
+  read -r -p "Proceed? [y/N] " go
+  [ "${go:-N}" = "y" ] || [ "${go:-N}" = "Y" ] || { echo "Aborted."; exit 1; }
+fi
 
 # ── Push with a throwaway credential helper ──────────────────────────
 ASKPASS="$(mktemp)"
@@ -70,8 +82,10 @@ EOF
 chmod 700 "$ASKPASS"
 
 export GH_USER GH_TOKEN
+PUSH_FLAGS=()
+[ "$FORCE" = 1 ] && PUSH_FLAGS+=(--force)
 GIT_ASKPASS="$ASKPASS" GIT_TERMINAL_PROMPT=0 \
-  git -c credential.helper= push "$URL" "HEAD:refs/heads/${REMOTE_BRANCH}"
+  git -c credential.helper= push ${PUSH_FLAGS[@]+"${PUSH_FLAGS[@]}"} "$URL" "HEAD:refs/heads/${REMOTE_BRANCH}"
 
 echo
 echo "Done. Pushed to https://github.com/${TARGET%.git}"
