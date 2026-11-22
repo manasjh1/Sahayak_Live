@@ -22,3 +22,6 @@ build/
 # ── Logs ─────────────────────────────────────────────────────────────
 *.log
 security/reports/
+
+# Local screenshots
+Screenshot*.png

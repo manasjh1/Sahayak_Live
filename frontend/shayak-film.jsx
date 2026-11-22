@@ -385,7 +385,8 @@ function Waitlist({ T, CU }) {
   const isDone = status === 'done' || status === 'duplicate';
 
   async function handleSubmit() {
-    if (!isValid || isDone || status === 'loading') return;
+    if (isDone || status === 'loading') return;
+    if (!isValid) { setErrorMsg('Please enter a valid email address.'); setStatus('error'); inputRef.current && inputRef.current.focus(); return; }
     setStatus('loading');
     setErrorMsg('');
     try {
@@ -440,12 +441,12 @@ function Waitlist({ T, CU }) {
             opacity: isDone ? 0.7 : 1,
           }}
         />
-        <div
+        <button
+          type="button"
           onClick={handleSubmit}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+          disabled={isDone || status === 'loading'}
           style={{
+            border: 'none',
             height: 76, padding: '0 40px', borderRadius: 999,
             display: 'flex', alignItems: 'center', gap: 12,
             background: btnBg, color: C.cream,
@@ -455,7 +456,7 @@ function Waitlist({ T, CU }) {
           }}
         >
           {btnLabel}
-        </div>
+        </button>
       </div>
       {status === 'error' && (
         <div style={{ fontFamily: BODY, fontSize: 18, color: C.a300, marginTop: 4 }}>
@@ -466,12 +467,171 @@ function Waitlist({ T, CU }) {
   );
 }
 
+// ── Sound — synthesized live with Web Audio (no audio files) ──────────
+// Browsers only allow audio after a click, so it starts muted behind a
+// "Sound on" button. Events fire as the timeline crosses their cue.
+function makeAudio() {
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return null;
+  const ctx = new AC();
+  const master = ctx.createGain(); master.gain.value = 0;
+  const comp = ctx.createDynamicsCompressor();
+  master.connect(comp); comp.connect(ctx.destination);
+
+  // simple echo "room"
+  const delay = ctx.createDelay(1.0); delay.delayTime.value = 0.27;
+  const fb = ctx.createGain(); fb.gain.value = 0.3;
+  const wet = ctx.createGain(); wet.gain.value = 0.3;
+  delay.connect(fb); fb.connect(delay); delay.connect(wet); wet.connect(master);
+  const fx = ctx.createGain(); fx.connect(master); fx.connect(delay);
+
+  // background pad: detuned oscillators -> lowpass
+  const padFilter = ctx.createBiquadFilter(); padFilter.type = 'lowpass'; padFilter.frequency.value = 300; padFilter.Q.value = 3;
+  const padGain = ctx.createGain(); padGain.gain.value = 0;
+  padFilter.connect(padGain); padGain.connect(master); padGain.connect(delay);
+  const pad = [0, 1, 2, 3].map(i => {
+    const o = ctx.createOscillator(); o.type = i === 0 ? 'sine' : 'sawtooth'; o.detune.value = (i - 1.5) * 6;
+    const g = ctx.createGain(); g.gain.value = i === 0 ? 0.55 : 0.1;
+    o.connect(g); g.connect(padFilter); o.start(); return o;
+  });
+  // tremolo (tension during the "Unbound" scene)
+  const lfo = ctx.createOscillator(); lfo.frequency.value = 6;
+  const lfoAmt = ctx.createGain(); lfoAmt.gain.value = 0;
+  lfo.connect(lfoAmt); lfoAmt.connect(padGain.gain); lfo.start();
+
+  const noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+  const nd = noiseBuf.getChannelData(0);
+  for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+
+  const now = () => ctx.currentTime;
+  function tone(f, { type = 'sine', dur = 0.3, vol = 0.15, at = 0, to = null, attack = 0.006 } = {}) {
+    const t0 = now() + at;
+    const o = ctx.createOscillator(); o.type = type; o.frequency.setValueAtTime(f, t0);
+    if (to) o.frequency.exponentialRampToValueAtTime(to, t0 + dur);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(vol, t0 + attack);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(g); g.connect(fx); o.start(t0); o.stop(t0 + dur + 0.05);
+  }
+  function noise({ dur = 0.6, vol = 0.15, from = 200, to = 3000, type = 'bandpass', at = 0 } = {}) {
+    const t0 = now() + at;
+    const src = ctx.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
+    const f = ctx.createBiquadFilter(); f.type = type; f.Q.value = 1.2;
+    f.frequency.setValueAtTime(from, t0); f.frequency.exponentialRampToValueAtTime(to, t0 + dur);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(vol, t0 + dur * 0.6);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    src.connect(f); f.connect(g); g.connect(fx); src.start(t0); src.stop(t0 + dur + 0.05);
+  }
+  return { ctx, master, padGain, padFilter, pad, lfoAmt, tone, noise };
+}
+
+const CHORDS = {
+  dark:  [110, 164.81, 220, 261.63],   // A minor — the AI waking
+  tense: [110, 116.54, 164.81, 233.08], // clashing — unbound
+  safe:  [110, 164.81, 220, 277.18],   // A major — controlled
+  warm:  [110, 164.81, 246.94, 277.18], // A add9 — trust / end card
+};
+
+function applyMood(a, T, CU, ended) {
+  const t = a.ctx.currentTime;
+  let chord, cutoff, vol, trem;
+  if (T < CU.Unbound)            { chord = CHORDS.dark;  cutoff = 250 + 650 * Math.min(1, T / 3); vol = 0.22; trem = 0; }
+  else if (T < CU.Shayak + 3.3)  { chord = CHORDS.tense; cutoff = 1700; vol = 0.3;  trem = 0.1; }
+  else if (T < CU.Trust)         { chord = CHORDS.safe;  cutoff = 1100; vol = 0.26; trem = 0; }
+  else                           { chord = CHORDS.warm;  cutoff = 1400; vol = 0.26; trem = 0; }
+  if (ended) vol = 0.1;
+  a.pad.forEach((o, i) => o.frequency.setTargetAtTime(chord[i], t, 0.25));
+  a.padFilter.frequency.setTargetAtTime(cutoff, t, 0.4);
+  a.padGain.gain.setTargetAtTime(vol, t, 0.6);
+  a.lfoAmt.gain.setTargetAtTime(trem, t, 0.3);
+}
+
+function soundEvents(CU) {
+  const ev = [];
+  // AI core ignites: rising whoosh
+  ev.push({ t: 0.8, fn: a => { a.noise({ dur: 1.7, vol: 0.12, from: 150, to: 3500 }); a.tone(110, { dur: 1.8, vol: 0.12, to: 220, attack: 0.6 }); } });
+  // chaos begins
+  ev.push({ t: CU.Unbound, fn: a => { a.tone(70, { type: 'sawtooth', dur: 0.9, vol: 0.12, to: 45 }); } });
+  rogueList(CU).forEach((k, i) => ev.push({ t: k.t0, fn: a => a.tone(500 + (i * 173) % 900, { type: 'square', dur: 0.09, vol: 0.035 }) }));
+  // three Shayak layers land, then lock
+  LAYERS.forEach((_, i) => ev.push({ t: CU.Shayak + 1.4 + i * 0.45, fn: a => {
+    a.tone(95 - i * 10, { dur: 0.5, vol: 0.45, to: 38 }); a.noise({ dur: 0.25, vol: 0.12, from: 900, to: 120, type: 'lowpass' });
+  } }));
+  ev.push({ t: CU.Shayak + 3.3, fn: a => [440, 554.37, 659.25, 880].forEach((f, i) => a.tone(f, { type: 'triangle', dur: 2.6, vol: 0.07, at: i * 0.06, attack: 0.02 })) });
+  // each decision: allowed chimes, blocked buzzes
+  ctrlList(CU).forEach(k => ev.push({ t: k.t0 + k.out, fn: a => {
+    if (k.ok) { a.tone(880, { dur: 0.18, vol: 0.06 }); a.tone(1318.5, { dur: 0.3, vol: 0.05, at: 0.07 }); }
+    else { a.tone(130, { type: 'square', dur: 0.22, vol: 0.06 }); a.tone(98, { type: 'square', dur: 0.26, vol: 0.05, at: 0.05 }); }
+  } }));
+  // companies / people / teams / developers connect
+  [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => ev.push({ t: CU.Trust + 2.0 + i * 0.25, fn: a => a.tone(f, { type: 'triangle', dur: 0.7, vol: 0.08 }) }));
+  // waitlist appears
+  ev.push({ t: CU.Waitlist, fn: a => { a.tone(1318.5, { dur: 1.6, vol: 0.04, attack: 0.05 }); a.tone(1760, { dur: 1.6, vol: 0.03, at: 0.12, attack: 0.05 }); } });
+  return ev;
+}
+
+// ── Site controls: sound toggle, skip, replay (outside the scaled canvas) ──
+function SiteOverlay() {
+  const { T, CUES: CU } = useComposition();
+  const tl = useTimeline();
+  const [sound, setSound] = React.useState(false);
+  const audioRef = React.useRef(null);
+  const prevT = React.useRef(T);
+  const events = React.useMemo(() => soundEvents(CU), [CU]);
+  const ended = tl.time >= tl.duration - 0.02;
+
+  React.useEffect(() => {
+    const p = prevT.current; prevT.current = T;
+    const a = audioRef.current;
+    if (!a || !sound) return;
+    applyMood(a, T, CU, ended);
+    if (T > p && T - p < 0.5) events.forEach(e => { if (e.t > p && e.t <= T) e.fn(a); });
+  }, [T, sound, ended]);
+
+  function toggleSound() {
+    if (!audioRef.current) audioRef.current = makeAudio();
+    const a = audioRef.current;
+    if (!a) return;
+    const next = !sound;
+    if (next) { a.ctx.resume(); a.master.gain.setTargetAtTime(0.85, a.ctx.currentTime, 0.3); applyMood(a, T, CU, ended); }
+    else a.master.gain.setTargetAtTime(0, a.ctx.currentTime, 0.08);
+    setSound(next);
+  }
+  const play = (t) => { tl.setTime(t); tl.setPlaying(true); };
+
+  const btn = {
+    pointerEvents: 'auto', cursor: 'pointer', border: `2px solid ${C.n700}`, borderRadius: 999,
+    background: 'rgba(46,43,37,0.85)', color: C.cream, fontFamily: BODY, fontWeight: 600,
+    fontSize: 15, padding: '10px 18px', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
+  };
+  const ui = (
+    <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 30 }}>
+      <button type="button" onClick={toggleSound} aria-pressed={sound}
+        style={{ ...btn, position: 'absolute', top: 16, right: 16, borderColor: sound ? C.s300 : C.n700 }}>
+        {sound ? '🔊 Sound on' : '🔇 Sound off'}
+      </button>
+      {!ended && T < CU.Waitlist - 0.5 && (
+        <button type="button" onClick={() => play(CU.Waitlist)}
+          style={{ ...btn, position: 'absolute', bottom: 16, right: 16 }}>Skip to waitlist →</button>
+      )}
+      {ended && (
+        <button type="button" onClick={() => play(0)}
+          style={{ ...btn, position: 'absolute', bottom: 16, right: 16 }}>↺ Replay</button>
+      )}
+    </div>
+  );
+  return ReactDOM.createPortal(ui, document.body);
+}
+
 // ── piece ───────────────────────────────────────────────────────────
 function Piece({ t }) {
   const { T, CUES: CU, authoredTotal: total } = useComposition();
   const cam = makeCam(T, CU, total);
   const pk = Packets({ cam, T, CU });
-  const fade = Math.max(tw(T, 1, 0, 0, 1.0), tw(T, 0, 1, total - 0.9, total));
+  const fade = tw(T, 1, 0, 0, 1.0);   // fade in only — the end card stays up
   const bar = t.letterbox ? 72 : 0;
   const rootRef = React.useRef(null);
   const sec = Math.floor(T);
@@ -511,8 +671,10 @@ function ShayakFilm() {
   const [t, setTweak] = useTweaks(window.TWEAK_DEFAULTS);
   return (
     <React.Fragment>
-      <CompositionStage width={W} height={H} scenes={window.OM_SCENES} playback={window.OM_PLAYBACK} bg={C.ink}>
+      <CompositionStage width={W} height={H} scenes={window.OM_SCENES} playback={window.OM_PLAYBACK} bg={C.ink}
+        controls={false} exportable={false} persist={false}>
         <Piece t={t} />
+        <SiteOverlay />
       </CompositionStage>
       <TweaksPanel>
         <TweakSection label="Film" />

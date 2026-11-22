@@ -358,6 +358,12 @@ function Stage({
   // passes the validated value from the OM_PLAYBACK authoring contract.
   playback = null,
   persistKey = 'animstage-v3',
+  // Website mode: controls=false hides the play bar and keyboard transport;
+  // exportable=false renders plain HTML (no svg/foreignObject) so forms work
+  // in every browser; persist=false always starts from 0.
+  controls = true,
+  exportable = true,
+  persist = true,
   children,
 }) {
   // Props arrive as strings when Stage is mounted via <x-import> (DC
@@ -370,6 +376,7 @@ function Stage({
   const loopEff = playback ? playback.mode === 'loop' : loop;
 
   const [time, setTime] = React.useState(() => {
+    if (!persist) return 0;
     try {
       const v = parseFloat(localStorage.getItem(persistKey + ':t') || '0');
       return isFinite(v) ? clamp(v, 0, duration) : 0;
@@ -395,15 +402,16 @@ function Stage({
 
   // Persist playhead
   React.useEffect(() => {
+    if (!persist) return;
     try { localStorage.setItem(persistKey + ':t', String(time)); } catch {}
-  }, [time, persistKey]);
+  }, [time, persistKey, persist]);
 
   // Auto-scale to fit viewport
   React.useEffect(() => {
     if (!stageRef.current) return;
     const el = stageRef.current;
     const measure = () => {
-      const barH = 44; // playback bar height
+      const barH = controls ? 44 : 0; // playback bar height
       const s = Math.min(
         el.clientWidth / width,
         (el.clientHeight - barH) / height
@@ -418,7 +426,7 @@ function Stage({
       ro.disconnect();
       window.removeEventListener('resize', measure);
     };
-  }, [width, height]);
+  }, [width, height, controls]);
 
   // Passes completed since playback last started. Lives in a ref so the
   // per-frame wrap can count without re-running this effect; reset on
@@ -470,6 +478,7 @@ function Stage({
 
   // Keyboard: space = play/pause, ← → = seek
   React.useEffect(() => {
+    if (!controls) return;
     const onKey = (e) => {
       if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
       if (e.code === 'Space') {
@@ -485,7 +494,7 @@ function Stage({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [duration]);
+  }, [duration, controls]);
 
   // Video-export protocol + the editor's play bar: hosts dispatch this
   // event per frame; pause + sync the playhead so the frame shows exactly
@@ -590,7 +599,7 @@ function Stage({
         position: 'absolute', inset: 0,
         display: 'flex', flexDirection: 'column',
         alignItems: 'center',
-        background: '#0a0a0a',
+        background: controls ? '#0a0a0a' : background,
         fontFamily: 'Inter, system-ui, sans-serif',
       }}
     >
@@ -602,6 +611,19 @@ function Stage({
         overflow: 'hidden',
         minHeight: 0,
       }}>
+        {!exportable ? (
+          <div
+            ref={canvasRef}
+            style={{
+              width, height, flexShrink: 0, position: 'relative', overflow: 'hidden',
+              background, transform: `scale(${scale})`, transformOrigin: 'center',
+            }}
+          >
+            <TimelineContext.Provider value={ctxValue}>
+              {children}
+            </TimelineContext.Provider>
+          </div>
+        ) : (
         <svg
           ref={canvasRef}
           width={width} height={height}
@@ -630,10 +652,11 @@ function Stage({
             </div>
           </foreignObject>
         </svg>
+        )}
       </div>
 
       {/* Playback bar — stacked below canvas, never overlapping */}
-      <PlaybackBar
+      {controls && <PlaybackBar
         time={displayTime}
         actualTime={time}
         duration={duration}
@@ -642,7 +665,7 @@ function Stage({
         onReset={() => { setTime(0); }}
         onSeek={(t) => setTime(t)}
         onHover={(t) => setHoverTime(t)}
-      />
+      />}
     </div>
   );
 }
@@ -1124,7 +1147,10 @@ function CompositionStage(props) {
   return (
     <React.Fragment>
       <Stage width={width} height={height} duration={derived.total} background={bg}
-             autoplay={autoplay} loop={loop} playback={pb}>
+             autoplay={autoplay} loop={loop} playback={pb}
+             controls={props.controls !== false}
+             exportable={props.exportable !== false}
+             persist={props.persist !== false}>
         <SceneSync raw={raw} onUpdate={setRaw} />
         {typeof praw === 'string' && praw !== '' && (
           <PlaybackSync raw={praw} onUpdate={setPraw} />
