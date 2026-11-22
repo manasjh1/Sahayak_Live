@@ -22,6 +22,14 @@ async def main() -> int:
     for p in ("postgresql+asyncpg://", "postgres://"):
         if uri.startswith(p):
             uri = "postgresql://" + uri[len(p):]
+    if not uri.startswith(("postgresql://", "postgres://")):
+        print(
+            "That is not a Postgres connection string (it must start with postgresql://).\n"
+            "You probably pasted the project URL or an API key. In Supabase click\n"
+            "'Connect' (top bar) -> 'Session pooler' and copy that URI instead.",
+            file=sys.stderr,
+        )
+        return 1
     if "[YOUR-PASSWORD]" in uri:
         print("Replace [YOUR-PASSWORD] with your real database password.", file=sys.stderr)
         return 1
