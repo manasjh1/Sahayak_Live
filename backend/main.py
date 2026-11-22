@@ -20,6 +20,8 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from datetime import datetime
 from urllib.parse import urlsplit
+from uuid import uuid4
+from sqlalchemy.engine import make_url
 import os
 import re
 import secrets
@@ -74,14 +76,17 @@ limiter = Limiter(key_func=get_remote_address, default_limits=["200/minute"])
 _db_host = (urlsplit(DATABASE_URL.replace("+asyncpg", "")).hostname or "")
 _is_local_db = _db_host in ("localhost", "127.0.0.1", "db", "")
 _connect_args: dict = {
-    # Supabase's pooler (pgbouncer) can't use asyncpg's prepared-statement cache
+    # Supabase's transaction pooler (pgbouncer, port 6543) routes each query to
+    # any backend, so prepared statements must not be cached or reuse names.
     "statement_cache_size": 0,
+    "prepared_statement_name_func": lambda: f"__asyncpg_{uuid4().hex}__",
 }
 if not _is_local_db:
     _connect_args["ssl"] = "require"   # Supabase requires TLS
 
 engine = create_async_engine(
-    DATABASE_URL,
+    # SQLAlchemy keeps its own prepared-statement cache too; disable it
+    make_url(DATABASE_URL).update_query_dict({"prepared_statement_cache_size": "0"}),
     echo=False,
     pool_pre_ping=True,
     pool_size=3,        # stay well inside Supabase free-tier connection limits
