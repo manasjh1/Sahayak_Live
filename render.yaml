@@ -1,0 +1,18 @@
+# Render Blueprint — single Docker web service, database on Supabase
+services:
+  - type: web
+    name: shayak
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL        # Supabase *Session pooler* URI (see README)
+        sync: false
+      - key: ADMIN_API_KEY
+        generateValue: true
+      - key: ENV
+        value: production
+      - key: CORS_ORIGINS        # e.g. https://shayak.onrender.com
+        sync: false

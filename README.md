@@ -98,6 +98,24 @@ dies, the container exits and `restart: unless-stopped` restarts it.
 
 ---
 
+## Deploy on Render (free) with Supabase
+
+Render's free tier has no persistent disk, so the database lives on Supabase
+and the container runs only nginx + FastAPI (when `DATABASE_URL` is set the
+built-in Postgres is skipped).
+
+1. Supabase → **Connect** → copy the **Session pooler** URI
+   (`...pooler.supabase.com:5432`). Use the pooler, not the "Direct connection":
+   Render's free tier is IPv4-only and the direct host is IPv6-only.
+2. Render → **New → Blueprint** → select this repo (uses `render.yaml`).
+3. Set env vars: `DATABASE_URL` (the URI above, with your DB password) and
+   `CORS_ORIGINS` (your Render URL). `ADMIN_API_KEY` is generated for you.
+
+The `waitlist` table is created automatically on startup. The free service
+sleeps after ~15 min idle, so the first request after that is slow.
+
+---
+
 ## Useful Commands
 
 ```bash

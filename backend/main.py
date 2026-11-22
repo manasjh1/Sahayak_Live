@@ -19,6 +19,7 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from datetime import datetime
+from urllib.parse import urlsplit
 import os
 import re
 import secrets
@@ -36,6 +37,11 @@ if not _db_url:
         "DATABASE_URL environment variable is required but not set. "
         "Copy .env.example to .env and configure it."
     )
+# Accept plain postgres:// / postgresql:// URLs (e.g. copied from Supabase)
+# and make them use the asyncpg driver.
+for _prefix in ("postgres://", "postgresql://"):
+    if _db_url.startswith(_prefix):
+        _db_url = "postgresql+asyncpg://" + _db_url[len(_prefix):]
 DATABASE_URL: str = _db_url
 
 # HIGH FIX #2: Admin API key — required, no weak default
@@ -65,7 +71,23 @@ log.info("CORS origins : %s", CORS_ORIGINS)
 limiter = Limiter(key_func=get_remote_address, default_limits=["200/minute"])
 
 # ── database ──────────────────────────────────────────────────────────
-engine = create_async_engine(DATABASE_URL, echo=False, pool_pre_ping=True)
+_db_host = (urlsplit(DATABASE_URL.replace("+asyncpg", "")).hostname or "")
+_is_local_db = _db_host in ("localhost", "127.0.0.1", "db", "")
+_connect_args: dict = {
+    # Supabase's pooler (pgbouncer) can't use asyncpg's prepared-statement cache
+    "statement_cache_size": 0,
+}
+if not _is_local_db:
+    _connect_args["ssl"] = "require"   # Supabase requires TLS
+
+engine = create_async_engine(
+    DATABASE_URL,
+    echo=False,
+    pool_pre_ping=True,
+    pool_size=3,        # stay well inside Supabase free-tier connection limits
+    max_overflow=2,
+    connect_args=_connect_args,
+)
 AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
 
@@ -165,7 +187,8 @@ async def security_headers(request: Request, call_next):
             "max-age=63072000; includeSubDomains; preload"
         )
     # HIGH FIX #5b: Strip server banner entirely
-    response.headers.pop("server", None)
+    if "server" in response.headers:
+        del response.headers["server"]
     return response
 
 
