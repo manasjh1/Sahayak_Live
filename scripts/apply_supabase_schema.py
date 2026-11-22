@@ -18,13 +18,14 @@ SQL = (pathlib.Path(__file__).resolve().parent.parent / "db" / "supabase.sql").r
 
 
 async def main() -> int:
-    uri = getpass.getpass("Supabase Session pooler URI (hidden): ").strip()
+    uri = getpass.getpass("Supabase Session pooler URI (hidden, paste then Enter): ").strip().strip("'\"<>")
     for p in ("postgresql+asyncpg://", "postgres://"):
         if uri.startswith(p):
             uri = "postgresql://" + uri[len(p):]
     if not uri.startswith(("postgresql://", "postgres://")):
         print(
-            "That is not a Postgres connection string (it must start with postgresql://).\n"
+            f"Received {len(uri)} characters starting with {uri.split(':')[0][:12]!r} -- "
+            "not a Postgres connection string (must start with postgresql://).\n"
             "You probably pasted the project URL or an API key. In Supabase click\n"
             "'Connect' (top bar) -> 'Session pooler' and copy that URI instead.",
             file=sys.stderr,
