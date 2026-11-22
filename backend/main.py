@@ -1,5 +1,5 @@
 """
-Shayak AI Control Layer — Waitlist API
+Sahayak AI Control Layer — Waitlist API
 FastAPI + Supabase (Postgres) · Strict CORS · Security headers · Rate limiting
 All HIGH/CRITICAL security issues resolved.
 """
@@ -126,7 +126,7 @@ async def lifespan(app: FastAPI):
 
 # ── app ───────────────────────────────────────────────────────────────
 app = FastAPI(
-    title="Shayak Waitlist API",
+    title="Sahayak Waitlist API",
     version="1.0.0",
     lifespan=lifespan,
     # HIGH FIX #3: Docs disabled in production — no route exposure
@@ -295,7 +295,7 @@ async def health():
 )
 @limiter.limit("5/minute")
 async def join_waitlist(request: Request, payload: WaitlistRequest):
-    """Register an email on the Shayak waitlist."""
+    """Register an email on the Sahayak waitlist."""
     async with AsyncSessionLocal() as session:
         result = await session.execute(
             select(WaitlistEntry).where(WaitlistEntry.email == payload.email)

@@ -1,4 +1,4 @@
-// Shayak — "the control layer" film. All motion keyed to T from useComposition().
+// Sahayak — "the control layer" film. All motion keyed to T from useComposition().
 const C = {
   ink: '#201e1d', n900: '#2e2b25', n800: '#474238', n700: '#645c50', n500: '#a19786',
   cream: '#f5ead8', sand: '#ebddc5',
@@ -297,7 +297,7 @@ function Status({ T, CU }) {
       padding: '14px 26px', borderRadius: 999, background: ctl ? C.s700 : C.a700, border: `2px solid ${ctl ? C.s300 : C.a400}`,
       color: C.cream, fontFamily: BODY, fontWeight: 700, fontSize: 24, letterSpacing: '0.16em' }}>
       <div style={{ width: 16, height: 16, borderRadius: '50%', background: ctl ? C.s200 : C.a300, opacity: blink }} />
-      {ctl ? 'CONTROLLED BY SHAYAK' : 'UNCONTROLLED'}
+      {ctl ? 'CONTROLLED BY SAHAYAK' : 'UNCONTROLLED'}
     </div>
   );
 }
@@ -310,7 +310,7 @@ function TitleCard({ T, CU }) {
   return (
     <div style={{ position: 'absolute', left: 120, top: 150 + y, opacity: o }}>
       <div style={{ fontFamily: BODY, fontWeight: 700, fontSize: 24, letterSpacing: '0.3em', color: C.s300 }}>INTRODUCING</div>
-      <div style={{ fontFamily: HEAD, fontSize: 168, lineHeight: 1, color: C.cream, letterSpacing: '-0.02em', marginTop: 10 }}>Shayak</div>
+      <div style={{ fontFamily: HEAD, fontSize: 168, lineHeight: 1, color: C.cream, letterSpacing: '-0.02em', marginTop: 10 }}>Sahayak</div>
       <div style={{ fontFamily: BODY, fontSize: 34, color: C.sand, marginTop: 18 }}>The control layer for AI.</div>
     </div>
   );
@@ -360,111 +360,14 @@ function EndCard({ T, CU, total }) {
   if (o <= 0) return null;
   return (
     <div style={{ position: 'absolute', left: 0, right: 0, top: 130 + tw(T, 30, 0, s, s + 1.2), textAlign: 'center', opacity: o }}>
-      <div style={{ fontFamily: HEAD, fontSize: 120, lineHeight: 1, color: C.cream }}>Shayak</div>
+      <div style={{ fontFamily: HEAD, fontSize: 120, lineHeight: 1, color: C.cream }}>Sahayak</div>
       <div style={{ fontFamily: BODY, fontSize: 36, color: C.sand, marginTop: 16 }}>Keep AI safe. Keep it in your control.</div>
-      <Waitlist T={T} CU={CU} />
     </div>
   );
 }
 
-// ── Waitlist — real interactive form backed by the FastAPI / PostgreSQL API ──
-const API_URL = (window.SHAYAK_API_URL || '') + '/api/waitlist';
-
-function Waitlist({ T, CU }) {
-  const s = CU.Waitlist;
-  const o = tw(T, 0, 1, s, s + 0.6);
-  const y = tw(T, 24, 0, s, s + 0.8);
-
-  // Local interactive state (independent of the film timeline)
-  const [email, setEmail] = React.useState('');
-  const [status, setStatus] = React.useState('idle'); // idle | loading | done | duplicate | error
-  const [errorMsg, setErrorMsg] = React.useState('');
-  const inputRef = React.useRef(null);
-
-  const isValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-  const isDone = status === 'done' || status === 'duplicate';
-
-  async function handleSubmit() {
-    if (!isValid || isDone || status === 'loading') return;
-    setStatus('loading');
-    setErrorMsg('');
-    try {
-      const res = await fetch(API_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.detail || `HTTP ${res.status}`);
-      }
-      const data = await res.json();
-      setStatus(data.already_registered ? 'duplicate' : 'done');
-    } catch (err) {
-      setErrorMsg(err.message || 'Something went wrong. Try again.');
-      setStatus('error');
-    }
-  }
-
-  function handleKey(e) {
-    if (e.key === 'Enter') handleSubmit();
-  }
-
-  const btnBg = isDone ? C.s : status === 'loading' ? C.n700 : C.a;
-  const btnLabel =
-    status === 'loading'  ? 'Joining…'           :
-    status === 'done'     ? "✓ You're on the list":
-    status === 'duplicate'? '✓ Already registered':
-    status === 'error'    ? 'Try again'           : 'Join the waitlist';
-
-  return (
-    <div style={{ marginTop: 56, opacity: o, transform: `translateY(${y}px)`, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
-      <div style={{ fontFamily: BODY, fontWeight: 700, fontSize: 24, letterSpacing: '0.24em', color: C.s300 }}>
-        PUT YOUR EMAIL TO JOIN THE WAITLIST
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: 10, borderRadius: 999,
-        background: C.n900, border: `2px solid ${C.n700}`, boxShadow: '0 12px 32px rgba(0,0,0,0.35)' }}>
-        <input
-          ref={inputRef}
-          type="email"
-          placeholder="you@company.com"
-          value={email}
-          disabled={isDone || status === 'loading'}
-          onChange={(e) => { setEmail(e.target.value); if (status === 'error') setStatus('idle'); }}
-          onKeyDown={handleKey}
-          style={{
-            width: 520, height: 76, borderRadius: 999, background: C.cream,
-            border: 'none', outline: 'none', padding: '0 34px',
-            fontFamily: BODY, fontSize: 30,
-            color: email ? C.ink : C.n500,
-            opacity: isDone ? 0.7 : 1,
-          }}
-        />
-        <div
-          onClick={handleSubmit}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-          style={{
-            height: 76, padding: '0 40px', borderRadius: 999,
-            display: 'flex', alignItems: 'center', gap: 12,
-            background: btnBg, color: C.cream,
-            fontFamily: HEAD, fontSize: 30, whiteSpace: 'nowrap',
-            cursor: isDone || status === 'loading' ? 'default' : 'pointer',
-            transition: 'background 0.2s',
-          }}
-        >
-          {btnLabel}
-        </div>
-      </div>
-      {status === 'error' && (
-        <div style={{ fontFamily: BODY, fontSize: 18, color: C.a300, marginTop: 4 }}>
-          ⚠ {errorMsg}
-        </div>
-      )}
-    </div>
-  );
-}
+// ── Waitlist API endpoint ──
+const API_URL = (window.SAHAYAK_API_URL || '') + '/api/waitlist';
 
 // ── Waitlist form — plain page HTML, always usable (not tied to the animation) ──
 
@@ -608,7 +511,7 @@ function soundEvents(CU) {
   // chaos begins
   ev.push({ t: CU.Unbound, fn: a => { a.tone(70, { type: 'sawtooth', dur: 0.9, vol: 0.12, to: 45 }); } });
   rogueList(CU).forEach((k, i) => ev.push({ t: k.t0, fn: a => a.tone(500 + (i * 173) % 900, { type: 'square', dur: 0.09, vol: 0.035 }) }));
-  // three Shayak layers land, then lock
+  // three Sahayak layers land, then lock
   LAYERS.forEach((_, i) => ev.push({ t: CU.Shayak + 1.4 + i * 0.45, fn: a => {
     a.tone(95 - i * 10, { dur: 0.5, vol: 0.45, to: 38 }); a.noise({ dur: 0.25, vol: 0.12, from: 900, to: 120, type: 'lowpass' });
   } }));
@@ -620,8 +523,6 @@ function soundEvents(CU) {
   } }));
   // companies / people / teams / developers connect
   [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => ev.push({ t: CU.Trust + 2.0 + i * 0.25, fn: a => a.tone(f, { type: 'triangle', dur: 0.7, vol: 0.08 }) }));
-  // waitlist appears
-  ev.push({ t: CU.Waitlist, fn: a => { a.tone(1318.5, { dur: 1.6, vol: 0.04, attack: 0.05 }); a.tone(1760, { dur: 1.6, vol: 0.03, at: 0.12, attack: 0.05 }); } });
   return ev;
 }
 
@@ -668,7 +569,7 @@ const SITE_CSS = `
 function storyBeat(T, CU) {
   if (T < CU.Unbound) return 'An AI model wakes up.';
   if (T < CU.Shayak) return 'Unchecked, it acts on its own — risky actions everywhere.';
-  if (T < CU.Control) return 'Shayak adds a control layer around it.';
+  if (T < CU.Control) return 'Sahayak adds a control layer around it.';
   if (T < CU.Trust) return 'Every action is checked. Risky ones are blocked and logged.';
   return 'Safe AI for companies and the people who use it.';
 }
@@ -689,16 +590,16 @@ function SiteUI() {
       <div className="shk-shade" />
       <div className="shk-wrap">
         <nav className="shk-nav" aria-label="Site">
-          <div className="shk-logo"><i aria-hidden="true" />Shayak</div>
+          <div className="shk-logo"><i aria-hidden="true" />Sahayak</div>
         </nav>
         <main className="shk-hero">
           <p className="shk-eyebrow">THE CONTROL LAYER FOR AI</p>
           <h1 className="shk-h1">Keep AI safe.<br />Keep it in your control.</h1>
-          <p className="shk-sub">Shayak sits between your AI and the real world. Every action is checked against your rules, risky ones are blocked, and every decision is logged.</p>
+          <p className="shk-sub">Sahayak sits between your AI and the real world. Every action is checked against your rules, risky ones are blocked, and every decision is logged.</p>
           <WaitlistForm />
           <div className="shk-live" aria-hidden="true"><b>LIVE</b><span>{storyBeat(T, CU)}</span></div>
         </main>
-        <footer className="shk-foot">© {new Date().getFullYear()} Shayak</footer>
+        <footer className="shk-foot">© {new Date().getFullYear()} Sahayak</footer>
       </div>
     </div>
   );
@@ -757,7 +658,7 @@ function FilmPiece() {
   return (
     <div ref={rootRef} style={{ position: 'absolute', inset: 0, overflow: 'hidden', fontFamily: BODY,
       background: `radial-gradient(ellipse at 50% 55%, ${C.n800} 0%, ${C.n900} 45%, ${C.ink} 100%)` }}>
-      <div style={{ position: 'absolute', inset: 0, opacity: tw(T, 1, 0.15, CU.Waitlist - 0.3, CU.Waitlist + 0.6) }}>
+      <div style={{ position: 'absolute', inset: 0 }}>
       <Floor cam={cam} T={T} CU={CU} />
       <Nodes cam={cam} T={T} CU={CU} />
       <Layers cam={cam} T={T} CU={CU} front={false} hits={[]} />
@@ -785,73 +686,37 @@ function FilmPiece() {
   );
 }
 
-// ── Audio: one shared engine, always on once the visitor presses Play ─
-// Browsers only allow sound after a click, so the page opens on a Play
-// screen; that single click unlocks music, effects and the voice-over.
+// ── Audio: one shared engine, always on ─────────────────────────────
+// Browsers never allow sound before the visitor interacts with the page,
+// so the film starts silently and sound switches on at the first click,
+// tap or key press anywhere (no button needed).
 const AUDIO = { a: null };
 
 function unlockAudio() {
   try {
     if (!AUDIO.a) AUDIO.a = makeAudio();
     const a = AUDIO.a;
-    if (a) { a.ctx.resume(); a.master.gain.setTargetAtTime(0.8, a.ctx.currentTime, 0.3); }
+    if (a && a.ctx.state !== 'running') { a.ctx.resume(); a.master.gain.setTargetAtTime(AUDIO.level || 0.8, a.ctx.currentTime, 0.3); }
   } catch (e) {}
-  // speech must also be started from the click (iOS Safari / Chrome)
-  if ('speechSynthesis' in window) {
-    try { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; window.speechSynthesis.speak(u); } catch (e) {}
-  }
 }
+['pointerdown', 'keydown', 'touchstart'].forEach(ev => window.addEventListener(ev, unlockAudio, { capture: true, passive: true }));
 
-// ── Voice-over (spoken with the visitor's built-in system voice) ─────
-function pickVoice() {
-  if (!('speechSynthesis' in window)) return null;
-  const vs = window.speechSynthesis.getVoices().filter(v => /^en(-|_|$)/i.test(v.lang));
-  if (!vs.length) return null;
-  const score = v => (/natural|neural|premium|enhanced/i.test(v.name) ? 4 : 0)
-    + (/google uk english male|google us english|daniel|samantha|aaron|alex/i.test(v.name) ? 2 : 0)
-    + (/en[-_](us|gb)/i.test(v.lang) ? 1 : 0);
-  return vs.slice().sort((x, y) => score(y) - score(x))[0];
-}
-if ('speechSynthesis' in window) window.speechSynthesis.onvoiceschanged = () => {};
-
-function say(text) {
-  if (!('speechSynthesis' in window)) return;
-  const u = new SpeechSynthesisUtterance(text);
-  const v = pickVoice();
-  if (v) { u.voice = v; u.lang = v.lang; } else u.lang = 'en-US';
-  u.rate = 0.95; u.pitch = 1; u.volume = 1;
-  window.speechSynthesis.speak(u);
-}
-
-function narration(CU) {
-  return [
-    { t: 1.2,              text: 'An A.I. wakes up.' },
-    { t: CU.Unbound + 0.8, text: 'Powerful. Fast. Acting on its own.' },
-    { t: CU.Shayak + 0.4,  text: 'So we add a layer.' },
-    { t: CU.Control + 0.6, text: 'Every action, checked against your rules. Every decision, logged.' },
-    { t: CU.Trust + 0.1,   text: 'Safe A.I., for companies and the people who use it.' },
-    { t: CU.Trust + 3.6,   text: 'Shayak. Keep A.I. safe. Keep it in your control.' },
-    { t: CU.Waitlist + 0.6, text: 'Join the waitlist.' },
-  ];
-}
-
-// Plays music + cue effects (and, in the film, the voice-over) in sync with the timeline
+// Plays music + cue effects in sync with the timeline
 function SoundDriver({ mode }) {
   const { T, CUES: CU } = useComposition();
   const prevT = React.useRef(T);
   const events = React.useMemo(() => soundEvents(CU), [CU]);
-  const lines = React.useMemo(() => narration(CU), [CU]);
   React.useEffect(() => {
+    AUDIO.level = mode === 'site' ? 0.45 : 0.8;
     const a = AUDIO.a;
-    if (a) a.master.gain.setTargetAtTime(mode === 'site' ? 0.45 : 0.8, a.ctx.currentTime, 0.8);
+    if (a) a.master.gain.setTargetAtTime(AUDIO.level, a.ctx.currentTime, 0.8);
   }, [mode]);
   React.useEffect(() => {
     const p = prevT.current; prevT.current = T;
     const a = AUDIO.a;
-    if (a) applyMood(a, T, CU, false, mode === 'film' ? 0.7 : 0.6);   // music sits under the voice
+    if (a) applyMood(a, T, CU, false, mode === 'film' ? 1 : 0.6);
     if (!(T > p && T - p < 0.5)) return;                                // ignore loop wrap / jumps
     if (a) events.forEach(e => { if (e.t > p && e.t <= T) e.fn(a); });
-    if (mode === 'film') lines.forEach(l => { if (l.t > p && l.t <= T) say(l.text); });
   }, [T]);
   return null;
 }
@@ -866,48 +731,28 @@ function OnFilmEnd({ onEnd }) {
   return null;
 }
 
-// ── Start screen + skip (outside the scaled film) ───────────────────
-const GATE_CSS = `
-.shk-gate{position:fixed;inset:0;z-index:20;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:28px;background:${C.ink};color:${C.cream};font-family:${BODY};text-align:center;padding:24px}
-.shk-gate h1{font-family:${HEAD};font-weight:400;font-size:clamp(48px,8vw,96px);margin:0;line-height:1}
-.shk-gate p{margin:0;color:${C.sand};font-size:clamp(16px,1.6vw,20px)}
-.shk-play{display:inline-flex;align-items:center;gap:14px;height:68px;padding:0 36px;border:none;border-radius:999px;background:${C.a};color:${C.cream};font:400 26px ${HEAD};cursor:pointer;box-shadow:0 12px 32px rgba(0,0,0,.4);transition:background .2s,transform .1s}
-.shk-play:hover{background:${C.a700}}.shk-play:active{transform:scale(.98)}
-.shk-play:focus-visible,.shk-skip:focus-visible{outline:3px solid ${C.a300};outline-offset:3px}
+// ── Skip button during the film (outside the scaled film) ──────────
+const SKIP_CSS = `
 .shk-skip{position:fixed;right:18px;bottom:18px;z-index:21;border:1px solid ${C.n700};background:rgba(46,43,37,.75);color:${C.sand};font:600 14px ${BODY};padding:9px 16px;border-radius:999px;cursor:pointer}
-.shk-gate .shk-skip{position:static;background:none;border:none;text-decoration:underline;text-underline-offset:4px;color:${C.n500}}
+.shk-skip:focus-visible{outline:3px solid ${C.a300};outline-offset:3px}
 `;
 
-function FilmChrome({ phase, onPlay, onSkip }) {
-  const ui = phase === 'intro' ? (
-    <div className="shk-gate">
-      <style>{GATE_CSS}</style>
-      <h1>Shayak</h1>
-      <p>The control layer for AI</p>
-      <button type="button" className="shk-play" onClick={onPlay} autoFocus>▶ Play</button>
-      <button type="button" className="shk-skip" onClick={onSkip}>Skip intro</button>
-    </div>
-  ) : (
+function FilmChrome({ onSkip }) {
+  return ReactDOM.createPortal(
     <React.Fragment>
-      <style>{GATE_CSS}</style>
+      <style>{SKIP_CSS}</style>
       <button type="button" className="shk-skip" onClick={onSkip}>Skip intro →</button>
-    </React.Fragment>
-  );
-  return ReactDOM.createPortal(ui, document.body);
+    </React.Fragment>,
+    document.body);
 }
 
-// ── Page flow: Play screen → original film (with sound) → landing page ─
+// ── Page flow: film (plays immediately) → landing page ──────────────
 const FILM_ONCE = '{"mode":"times","count":1}';
 const SITE_LOOP = '{"mode":"loop"}';
 
 function ShayakFilm() {
-  const [phase, setPhase] = React.useState('intro');   // intro | film | site
-  const play = () => { unlockAudio(); setPhase('film'); };
-  const toSite = () => {
-    if (!AUDIO.a) unlockAudio();
-    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
-    setPhase('site');
-  };
+  const [phase, setPhase] = React.useState('film');   // film | site
+  const toSite = () => setPhase('site');
 
   if (phase === 'site') {
     return (
@@ -920,12 +765,12 @@ function ShayakFilm() {
     );
   }
   return (
-    <CompositionStage key={phase} width={W} height={H} scenes={window.OM_SCENES} playback={FILM_ONCE} bg={C.ink}
-      autoplay={phase === 'film'} controls={false} exportable={false} persist={false}>
+    <CompositionStage key="film" width={W} height={H} scenes={window.OM_SCENES} playback={FILM_ONCE} bg={C.ink}
+      controls={false} exportable={false} persist={false}>
       <FilmPiece />
-      {phase === 'film' && <SoundDriver mode="film" />}
-      {phase === 'film' && <OnFilmEnd onEnd={toSite} />}
-      <FilmChrome phase={phase} onPlay={play} onSkip={toSite} />
+      <SoundDriver mode="film" />
+      <OnFilmEnd onEnd={toSite} />
+      <FilmChrome onSkip={toSite} />
     </CompositionStage>
   );
 }

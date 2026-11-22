@@ -1,4 +1,4 @@
--- Shayak waitlist — Supabase schema (idempotent; safe to re-run)
+-- Sahayak waitlist — Supabase schema (idempotent; safe to re-run)
 -- Matches the SQLAlchemy model in backend/main.py.
 
 CREATE TABLE IF NOT EXISTS public.waitlist (

@@ -1,4 +1,4 @@
-# Shayak AI Control Layer
+# Sahayak AI Control Layer
 
 One Docker image, one process: **FastAPI** serves the waitlist API and the static film.
 The database is **Supabase** (Postgres) — nothing database-related runs in the container.
