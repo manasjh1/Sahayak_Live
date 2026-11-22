@@ -20,12 +20,12 @@ function kf(T, keys) {
 }
 
 // ── camera / projection ─────────────────────────────────────────────
-function makeCam(T, CU, total) {
+function makeCam(T, CU, total, shift = 0) {
   const pitch = kf(T, [[0, 10], [CU.Unbound, 24], [CU.Shayak, 26], [CU.Shayak + 3, 32], [CU.Control + 1, 27], [CU.Trust, 27], [CU.Trust + 3, 44], [total, 46]]) * Math.PI / 180;
   const D = kf(T, [[0, 2700], [CU.Unbound, 1550], [CU.Shayak, 1380], [CU.Shayak + 3, 1750], [CU.Control + 1.5, 1450], [CU.Trust, 1350], [CU.Trust + 3.2, 2350], [total, 2450]]);
   const orbit = 0.6 + T * 0.07;
   const shakeAmt = tw(T, 0, 1, CU.Unbound + 1, CU.Unbound + 3) * (1 - tw(T, 0, 1, CU.Shayak + 1.6, CU.Shayak + 2.4));
-  const cx = W / 2 + Math.sin(T * 37) * 5 * shakeAmt;
+  const cx = W / 2 + shift + Math.sin(T * 37) * 5 * shakeAmt;
   const cy = 610 + Math.cos(T * 29) * 4 * shakeAmt;
   const f = 1150, cp = Math.cos(pitch), sp = Math.sin(pitch), co = Math.cos(orbit), so = Math.sin(orbit);
   const P = (x, y, z) => {
@@ -287,182 +287,55 @@ function Nodes({ cam, T, CU }) {
   );
 }
 
-// ── HUD ─────────────────────────────────────────────────────────────
-function Status({ T, CU }) {
-  const on = tw(T, 0, 1, CU.Unbound + 0.6, CU.Unbound + 1.2);
-  const ctl = T > CU.Shayak + 3.3;
-  const blink = ctl ? 1 : 0.55 + 0.45 * Math.abs(Math.sin(T * 5));
-  return (
-    <div style={{ position: 'absolute', right: 80, top: 110, opacity: on * (1 - tw(T, 0, 1, CU.Trust + 2.6, CU.Trust + 3.2)), display: 'flex', alignItems: 'center', gap: 14,
-      padding: '14px 26px', borderRadius: 999, background: ctl ? C.s700 : C.a700, border: `2px solid ${ctl ? C.s300 : C.a400}`,
-      color: C.cream, fontFamily: BODY, fontWeight: 700, fontSize: 24, letterSpacing: '0.16em' }}>
-      <div style={{ width: 16, height: 16, borderRadius: '50%', background: ctl ? C.s200 : C.a300, opacity: blink }} />
-      {ctl ? 'CONTROLLED BY SHAYAK' : 'UNCONTROLLED'}
-    </div>
-  );
-}
-
-function TitleCard({ T, CU }) {
-  const s = CU.Shayak + 3.3;
-  const o = tw(T, 0, 1, s, s + 0.7) * (1 - tw(T, 0, 1, CU.Control + 0.6, CU.Control + 1.4));
-  const y = tw(T, 40, 0, s, s + 1.2);
-  if (o <= 0) return null;
-  return (
-    <div style={{ position: 'absolute', left: 120, top: 150 + y, opacity: o }}>
-      <div style={{ fontFamily: BODY, fontWeight: 700, fontSize: 24, letterSpacing: '0.3em', color: C.s300 }}>INTRODUCING</div>
-      <div style={{ fontFamily: HEAD, fontSize: 168, lineHeight: 1, color: C.cream, letterSpacing: '-0.02em', marginTop: 10 }}>Shayak</div>
-      <div style={{ fontFamily: BODY, fontSize: 34, color: C.sand, marginTop: 18 }}>The control layer for AI.</div>
-    </div>
-  );
-}
-
-function LogPanel({ T, CU }) {
-  const o = tw(T, 0, 1, CU.Control + 0.8, CU.Control + 1.5) * (1 - tw(T, 0, 1, CU.Trust + 0.4, CU.Trust + 1.2));
-  const x = tw(T, 80, 0, CU.Control + 0.8, CU.Control + 1.6);
-  if (o <= 0) return null;
-  const list = ctrlList(CU).filter(k => T >= k.t0 + k.out).reverse().slice(0, 6);
-  const allowed = 1284 + ctrlList(CU).filter(k => k.ok && T >= k.t0 + k.out).length;
-  const blocked = 37 + ctrlList(CU).filter(k => !k.ok && T >= k.t0 + k.out).length;
-  return (
-    <div style={{ position: 'absolute', right: 80, top: 200, width: 560, opacity: o, transform: `translateX(${x}px)`,
-      background: 'rgba(46,43,37,0.88)', border: `2px solid ${C.n700}`, borderRadius: 28, padding: 30, boxShadow: '0 12px 32px rgba(0,0,0,0.35)' }}>
-      <div style={{ fontFamily: HEAD, fontSize: 32, color: C.cream }}>Decision log</div>
-      <div style={{ display: 'flex', gap: 16, marginTop: 18 }}>
-        <div style={{ flex: 1, borderRadius: 16, background: C.s700, padding: '14px 18px' }}>
-          <div style={{ fontFamily: BODY, fontSize: 20, color: C.s200, fontWeight: 600 }}>Allowed</div>
-          <div style={{ fontFamily: HEAD, fontSize: 42, color: C.cream }}>{allowed.toLocaleString()}</div>
-        </div>
-        <div style={{ flex: 1, borderRadius: 16, background: C.a700, padding: '14px 18px' }}>
-          <div style={{ fontFamily: BODY, fontSize: 20, color: C.a300, fontWeight: 600 }}>Blocked</div>
-          <div style={{ fontFamily: HEAD, fontSize: 42, color: C.cream }}>{blocked}</div>
-        </div>
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 20, height: 6 * 54 }}>
-        {list.map((k) => {
-          const age = T - (k.t0 + k.out);
-          return (
-            <div key={k.label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, height: 44,
-              opacity: Math.min(1, age * 4), fontFamily: BODY, fontSize: 22, color: C.sand }}>
-              <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{k.label}</span>
-              <span style={{ flexShrink: 0, padding: '4px 14px', borderRadius: 999, fontSize: 18, fontWeight: 700, letterSpacing: '0.08em',
-                background: k.ok ? C.s300 : C.a300, color: k.ok ? C.s700 : C.a700 }}>{k.ok ? 'ALLOWED' : 'BLOCKED'}</span>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function EndCard({ T, CU, total }) {
-  const s = CU.Trust + 3.4;
-  const o = tw(T, 0, 1, s, s + 0.8);
-  if (o <= 0) return null;
-  return (
-    <div style={{ position: 'absolute', left: 0, right: 0, top: 130 + tw(T, 30, 0, s, s + 1.2), textAlign: 'center', opacity: o }}>
-      <div style={{ fontFamily: HEAD, fontSize: 120, lineHeight: 1, color: C.cream }}>Shayak</div>
-      <div style={{ fontFamily: BODY, fontSize: 36, color: C.sand, marginTop: 16 }}>Keep AI safe. Keep it in your control.</div>
-      <Waitlist T={T} CU={CU} />
-    </div>
-  );
-}
-
-// ── Waitlist — real interactive form backed by the FastAPI / PostgreSQL API ──
+// ── Waitlist form — plain page HTML, always usable (not tied to the animation) ──
 const API_URL = (window.SHAYAK_API_URL || '') + '/api/waitlist';
 
-function Waitlist({ T, CU }) {
-  const s = CU.Waitlist;
-  const o = tw(T, 0, 1, s, s + 0.6);
-  const y = tw(T, 24, 0, s, s + 0.8);
-
-  // Local interactive state (independent of the film timeline)
+function WaitlistForm() {
   const [email, setEmail] = React.useState('');
   const [status, setStatus] = React.useState('idle'); // idle | loading | done | duplicate | error
-  const [errorMsg, setErrorMsg] = React.useState('');
+  const [msg, setMsg] = React.useState('');
   const inputRef = React.useRef(null);
-
-  const isValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   const isDone = status === 'done' || status === 'duplicate';
 
-  async function handleSubmit() {
+  async function submit(e) {
+    e.preventDefault();
     if (isDone || status === 'loading') return;
-    if (!isValid) { setErrorMsg('Please enter a valid email address.'); setStatus('error'); inputRef.current && inputRef.current.focus(); return; }
-    setStatus('loading');
-    setErrorMsg('');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setStatus('error'); setMsg('Please enter a valid email address.');
+      inputRef.current && inputRef.current.focus();
+      return;
+    }
+    setStatus('loading'); setMsg('');
     try {
       const res = await fetch(API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email: email.trim() }),
       });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.detail || `HTTP ${res.status}`);
-      }
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 429) throw new Error('Too many attempts — please wait a minute and try again.');
+      if (!res.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Something went wrong. Please try again.');
       setStatus(data.already_registered ? 'duplicate' : 'done');
+      setMsg(data.already_registered ? "You're already on the list — we'll be in touch." : "Thanks! You're on the list. We'll email you when early access opens.");
     } catch (err) {
-      setErrorMsg(err.message || 'Something went wrong. Try again.');
       setStatus('error');
+      setMsg(err && err.message && !/Failed to fetch|NetworkError/i.test(err.message) ? err.message : "Couldn't reach the server. Please try again.");
     }
   }
 
-  function handleKey(e) {
-    if (e.key === 'Enter') handleSubmit();
-  }
-
-  const btnBg = isDone ? C.s : status === 'loading' ? C.n700 : C.a;
-  const btnLabel =
-    status === 'loading'  ? 'Joining…'           :
-    status === 'done'     ? "✓ You're on the list":
-    status === 'duplicate'? '✓ Already registered':
-    status === 'error'    ? 'Try again'           : 'Join the waitlist';
-
+  const label = status === 'loading' ? 'Joining…' : isDone ? '✓ Joined' : 'Join the waitlist';
   return (
-    <div style={{ marginTop: 56, opacity: o, transform: `translateY(${y}px)`, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
-      <div style={{ fontFamily: BODY, fontWeight: 700, fontSize: 24, letterSpacing: '0.24em', color: C.s300 }}>
-        PUT YOUR EMAIL TO JOIN THE WAITLIST
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: 10, borderRadius: 999,
-        background: C.n900, border: `2px solid ${C.n700}`, boxShadow: '0 12px 32px rgba(0,0,0,0.35)' }}>
-        <input
-          ref={inputRef}
-          type="email"
-          placeholder="you@company.com"
-          value={email}
-          disabled={isDone || status === 'loading'}
-          onChange={(e) => { setEmail(e.target.value); if (status === 'error') setStatus('idle'); }}
-          onKeyDown={handleKey}
-          style={{
-            width: 520, height: 76, borderRadius: 999, background: C.cream,
-            border: 'none', outline: 'none', padding: '0 34px',
-            fontFamily: BODY, fontSize: 30,
-            color: email ? C.ink : C.n500,
-            opacity: isDone ? 0.7 : 1,
-          }}
-        />
-        <button
-          type="button"
-          onClick={handleSubmit}
-          disabled={isDone || status === 'loading'}
-          style={{
-            border: 'none',
-            height: 76, padding: '0 40px', borderRadius: 999,
-            display: 'flex', alignItems: 'center', gap: 12,
-            background: btnBg, color: C.cream,
-            fontFamily: HEAD, fontSize: 30, whiteSpace: 'nowrap',
-            cursor: isDone || status === 'loading' ? 'default' : 'pointer',
-            transition: 'background 0.2s',
-          }}
-        >
-          {btnLabel}
-        </button>
-      </div>
-      {status === 'error' && (
-        <div style={{ fontFamily: BODY, fontSize: 18, color: C.a300, marginTop: 4 }}>
-          ⚠ {errorMsg}
-        </div>
-      )}
+    <div>
+      <form className="shk-form" onSubmit={submit} noValidate>
+        <label htmlFor="shk-email" className="shk-sr">Work email</label>
+        <input id="shk-email" ref={inputRef} type="email" autoComplete="email" inputMode="email"
+          placeholder="you@company.com" value={email} disabled={isDone || status === 'loading'}
+          onChange={(e) => { setEmail(e.target.value); if (status === 'error') { setStatus('idle'); setMsg(''); } }} />
+        <button type="submit" disabled={isDone || status === 'loading'} className={isDone ? 'is-done' : ''}>{label}</button>
+      </form>
+      <p className={'shk-msg ' + (status === 'error' ? 'is-error' : isDone ? 'is-ok' : '')} role="status" aria-live="polite">
+        {msg || 'No spam. Only an email when early access opens.'}
+      </p>
     </div>
   );
 }
@@ -538,7 +411,7 @@ const CHORDS = {
 function applyMood(a, T, CU, ended) {
   const t = a.ctx.currentTime;
   let chord, cutoff, vol, trem;
-  if (T < CU.Unbound)            { chord = CHORDS.dark;  cutoff = 250 + 650 * Math.min(1, T / 3); vol = 0.22; trem = 0; }
+  if (T < CU.Unbound)            { chord = CHORDS.dark;  cutoff = 250 + 650 * Math.min(1, T / 3); vol = 0.2; trem = 0; }
   else if (T < CU.Shayak + 3.3)  { chord = CHORDS.tense; cutoff = 1700; vol = 0.3;  trem = 0.1; }
   else if (T < CU.Trust)         { chord = CHORDS.safe;  cutoff = 1100; vol = 0.26; trem = 0; }
   else                           { chord = CHORDS.warm;  cutoff = 1400; vol = 0.26; trem = 0; }
@@ -573,73 +446,136 @@ function soundEvents(CU) {
   return ev;
 }
 
-// ── Site controls: sound toggle, skip, replay (outside the scaled canvas) ──
-function SiteOverlay() {
+// ── Landing page UI (real HTML over the looping background animation) ──
+const SITE_CSS = `
+.shk-page{position:fixed;inset:0;z-index:10;overflow-y:auto;color:${C.cream};font-family:${BODY};-webkit-font-smoothing:antialiased}
+.shk-shade{position:fixed;inset:0;pointer-events:none;background:linear-gradient(90deg,rgba(32,30,29,.95) 0%,rgba(32,30,29,.86) 34%,rgba(32,30,29,.25) 66%,rgba(32,30,29,.1) 100%)}
+.shk-wrap{position:relative;min-height:100%;box-sizing:border-box;display:flex;flex-direction:column;padding:22px clamp(20px,5vw,72px)}
+.shk-nav{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.shk-logo{font-family:${HEAD};font-size:28px;color:${C.cream};letter-spacing:-.01em;display:flex;align-items:center;gap:10px}
+.shk-logo i{width:14px;height:14px;border-radius:50%;background:${C.s300};box-shadow:0 0 0 4px rgba(204,219,178,.18);display:inline-block}
+.shk-hero{flex:1;display:flex;flex-direction:column;justify-content:center;max-width:600px;padding:48px 0}
+.shk-eyebrow{font-weight:700;font-size:13px;letter-spacing:.24em;color:${C.s300};margin:0 0 18px}
+.shk-h1{font-family:${HEAD};font-weight:400;font-size:clamp(40px,5.6vw,74px);line-height:1.02;letter-spacing:-.02em;margin:0;color:${C.cream}}
+.shk-sub{font-size:clamp(17px,1.5vw,20px);line-height:1.55;color:${C.sand};margin:22px 0 32px;max-width:520px}
+.shk-form{display:flex;flex-wrap:wrap;gap:10px;padding:8px;border-radius:999px;background:rgba(46,43,37,.9);border:1px solid ${C.n700};max-width:560px;box-sizing:border-box}
+.shk-form input{flex:1 1 220px;min-width:0;height:52px;border:none;outline:none;border-radius:999px;padding:0 22px;background:${C.cream};color:${C.ink};font:500 17px ${BODY}}
+.shk-form input:focus-visible{box-shadow:0 0 0 3px ${C.a400}}
+.shk-form button{flex:0 0 auto;height:52px;padding:0 26px;border:none;border-radius:999px;background:${C.a};color:${C.cream};font:400 18px ${HEAD};cursor:pointer;transition:background .2s,transform .1s}
+.shk-form button:hover:not(:disabled){background:${C.a700}}
+.shk-form button:active:not(:disabled){transform:scale(.98)}
+.shk-form button:focus-visible{outline:3px solid ${C.a300};outline-offset:2px}
+.shk-form button:disabled{cursor:default;opacity:.85}
+.shk-form button.is-done{background:${C.s}}
+.shk-msg{margin:12px 0 0 14px;font-size:14px;color:${C.n500};min-height:20px}
+.shk-msg.is-error{color:${C.a300}}
+.shk-msg.is-ok{color:${C.s300}}
+.shk-live{display:inline-flex;align-items:center;gap:10px;margin-top:34px;padding:8px 16px;border-radius:999px;background:rgba(46,43,37,.7);border:1px solid ${C.n700};font-size:14px;color:${C.sand};max-width:100%;box-sizing:border-box}
+.shk-live b{font-weight:700;font-size:11px;letter-spacing:.18em;color:${C.s300};display:inline-flex;align-items:center;gap:6px}
+.shk-live b::before{content:"";width:7px;height:7px;border-radius:50%;background:${C.a400};animation:shkpulse 1.6s ease-in-out infinite}
+.shk-live span{transition:opacity .4s}
+@keyframes shkpulse{50%{opacity:.25}}
+.shk-sound{display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 16px;border-radius:999px;border:1px solid ${C.n700};background:rgba(46,43,37,.8);color:${C.cream};font:600 14px ${BODY};cursor:pointer}
+.shk-sound.on{border-color:${C.s300}}
+.shk-sound:focus-visible{outline:3px solid ${C.a300};outline-offset:2px}
+.shk-foot{font-size:13px;color:${C.n500};padding-top:12px}
+.shk-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+@media (max-width:899px){.shk-shade{background:rgba(32,30,29,.78)}.shk-hero{padding:28px 0}}
+@media (max-width:480px){.shk-form{border-radius:22px}.shk-form button{flex:1 1 100%}}
+@media (prefers-reduced-motion:reduce){.shk-live b::before{animation:none}}
+`;
+
+function storyBeat(T, CU) {
+  if (T < CU.Unbound) return 'An AI model wakes up.';
+  if (T < CU.Shayak) return 'Unchecked, it acts on its own — risky actions everywhere.';
+  if (T < CU.Control) return 'Shayak adds a control layer around it.';
+  if (T < CU.Trust) return 'Every action is checked. Risky ones are blocked and logged.';
+  return 'Safe AI for companies and the people who use it.';
+}
+
+function SiteUI() {
   const { T, CUES: CU } = useComposition();
   const tl = useTimeline();
   const [sound, setSound] = React.useState(false);
   const audioRef = React.useRef(null);
   const prevT = React.useRef(T);
   const events = React.useMemo(() => soundEvents(CU), [CU]);
-  const ended = tl.time >= tl.duration - 0.02;
+
+  // Respect "reduce motion": hold a single calm frame instead of looping
+  React.useEffect(() => {
+    const mq = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)');
+    if (mq && mq.matches) { tl.setPlaying(false); tl.setTime(CU.Control + 4); }
+  }, []);
 
   React.useEffect(() => {
     const p = prevT.current; prevT.current = T;
     const a = audioRef.current;
     if (!a || !sound) return;
-    applyMood(a, T, CU, ended);
+    applyMood(a, T, CU, false);
+    // fire cue sounds the timeline just crossed (not on the loop wrap or a jump)
     if (T > p && T - p < 0.5) events.forEach(e => { if (e.t > p && e.t <= T) e.fn(a); });
-  }, [T, sound, ended]);
+  }, [T, sound]);
 
   function toggleSound() {
     if (!audioRef.current) audioRef.current = makeAudio();
     const a = audioRef.current;
     if (!a) return;
     const next = !sound;
-    if (next) { a.ctx.resume(); a.master.gain.setTargetAtTime(0.85, a.ctx.currentTime, 0.3); applyMood(a, T, CU, ended); }
+    if (next) { a.ctx.resume(); a.master.gain.setTargetAtTime(0.7, a.ctx.currentTime, 0.4); applyMood(a, T, CU, false); }
     else a.master.gain.setTargetAtTime(0, a.ctx.currentTime, 0.08);
     setSound(next);
   }
-  const play = (t) => { tl.setTime(t); tl.setPlaying(true); };
 
-  const btn = {
-    pointerEvents: 'auto', cursor: 'pointer', border: `2px solid ${C.n700}`, borderRadius: 999,
-    background: 'rgba(46,43,37,0.85)', color: C.cream, fontFamily: BODY, fontWeight: 600,
-    fontSize: 15, padding: '10px 18px', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
-  };
   const ui = (
-    <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 30 }}>
-      <button type="button" onClick={toggleSound} aria-pressed={sound}
-        style={{ ...btn, position: 'absolute', top: 16, right: 16, borderColor: sound ? C.s300 : C.n700 }}>
-        {sound ? '🔊 Sound on' : '🔇 Sound off'}
-      </button>
-      {!ended && T < CU.Waitlist - 0.5 && (
-        <button type="button" onClick={() => play(CU.Waitlist)}
-          style={{ ...btn, position: 'absolute', bottom: 16, right: 16 }}>Skip to waitlist →</button>
-      )}
-      {ended && (
-        <button type="button" onClick={() => play(0)}
-          style={{ ...btn, position: 'absolute', bottom: 16, right: 16 }}>↺ Replay</button>
-      )}
+    <div className="shk-page">
+      <style>{SITE_CSS}</style>
+      <div className="shk-shade" />
+      <div className="shk-wrap">
+        <nav className="shk-nav" aria-label="Site">
+          <div className="shk-logo"><i aria-hidden="true" />Shayak</div>
+          <button type="button" className={'shk-sound' + (sound ? ' on' : '')} onClick={toggleSound} aria-pressed={sound}>
+            {sound ? '🔊 Sound on' : '🔇 Sound off'}
+          </button>
+        </nav>
+        <main className="shk-hero">
+          <p className="shk-eyebrow">THE CONTROL LAYER FOR AI</p>
+          <h1 className="shk-h1">Keep AI safe.<br />Keep it in your control.</h1>
+          <p className="shk-sub">Shayak sits between your AI and the real world. Every action is checked against your rules, risky ones are blocked, and every decision is logged.</p>
+          <WaitlistForm />
+          <div className="shk-live" aria-hidden="true"><b>LIVE</b><span>{storyBeat(T, CU)}</span></div>
+        </main>
+        <footer className="shk-foot">© {new Date().getFullYear()} Shayak</footer>
+      </div>
     </div>
   );
   return ReactDOM.createPortal(ui, document.body);
 }
 
-// ── piece ───────────────────────────────────────────────────────────
-function Piece({ t }) {
+// ── background scene ────────────────────────────────────────────────
+// Ambient, looping version of the film: no titles, captions or end card
+// (the page provides the copy). On wide screens the scene shifts right so
+// the headline and form on the left stay readable.
+function useSceneShift() {
+  const get = () => (window.innerWidth >= 900 ? 330 : 0);
+  const [shift, setShift] = React.useState(get);
+  React.useEffect(() => {
+    const on = () => setShift(get());
+    window.addEventListener('resize', on);
+    return () => window.removeEventListener('resize', on);
+  }, []);
+  return shift;
+}
+
+function Piece() {
   const { T, CUES: CU, authoredTotal: total } = useComposition();
-  const cam = makeCam(T, CU, total);
+  const shift = useSceneShift();
+  const cam = makeCam(T, CU, total, shift);
   const pk = Packets({ cam, T, CU });
-  const fade = tw(T, 1, 0, 0, 1.0);   // fade in only — the end card stays up
-  const bar = t.letterbox ? 72 : 0;
-  const rootRef = React.useRef(null);
-  const sec = Math.floor(T);
-  React.useEffect(() => { const el = rootRef.current; if (el) el.setAttribute('data-screen-label', `t=${sec}s`); }, [sec]);
+  // soft dip at the loop seam so the restart isn't a hard cut
+  const dip = 0.85 * Math.max(tw(T, 1, 0, 0, 1.4), tw(T, 0, 1, total - 1.4, total));
   return (
-    <div ref={rootRef} style={{ position: 'absolute', inset: 0, overflow: 'hidden', fontFamily: BODY,
-      background: `radial-gradient(ellipse at 50% 55%, ${C.n800} 0%, ${C.n900} 45%, ${C.ink} 100%)` }}>
-      <div style={{ position: 'absolute', inset: 0, opacity: tw(T, 1, 0.15, CU.Waitlist - 0.3, CU.Waitlist + 0.6) }}>
+    <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', fontFamily: BODY,
+      background: `radial-gradient(ellipse at ${50 + shift / W * 100}% 55%, ${C.n800} 0%, ${C.n900} 45%, ${C.ink} 100%)` }}>
       <Floor cam={cam} T={T} CU={CU} />
       <Nodes cam={cam} T={T} CU={CU} />
       <Layers cam={cam} T={T} CU={CU} front={false} hits={[]} />
@@ -647,42 +583,18 @@ function Piece({ t }) {
       {pk.svg}
       <Layers cam={cam} T={T} CU={CU} front={true} hits={pk.hits} />
       {pk.chips}
-      </div>
-      <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse at center, rgba(32,30,29,0) 55%, rgba(32,30,29,0.75) 100%)', pointerEvents: 'none' }} />
-      <TitleCard T={T} CU={CU} />
-      <LogPanel T={T} CU={CU} />
-      <Status T={T} CU={CU} />
-      <EndCard T={T} CU={CU} total={total} />
-      {t.captions && <Captions style={{ bottom: bar + 46, font: `600 34px ${BODY}`, color: C.cream }} items={[
-        { at: 1.4, until: CU.Unbound - 0.2, text: 'An AI wakes up.' },
-        { at: CU.Unbound + 0.8, until: CU.Shayak - 0.1, text: 'Powerful. Fast. Acting on its own.' },
-        { at: CU.Shayak + 0.4, until: CU.Shayak + 3.1, text: 'So we add a layer.' },
-        { at: CU.Control + 0.6, until: CU.Trust - 0.1, text: 'Every action checked against your rules. Every decision logged.' },
-        { at: CU.Trust + 0.1, until: CU.Trust + 2.0, text: 'Safe AI for companies and the people who use it.' },
-      ]} />}
-      <div style={{ position: 'absolute', left: 0, right: 0, top: 0, height: bar, background: C.ink }} />
-      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: bar, background: C.ink }} />
-      <div style={{ position: 'absolute', inset: 0, background: C.ink, opacity: fade, pointerEvents: 'none' }} />
+      <div style={{ position: 'absolute', inset: 0, background: C.ink, opacity: dip, pointerEvents: 'none' }} />
     </div>
   );
 }
 
 function ShayakFilm() {
-  const [t, setTweak] = useTweaks(window.TWEAK_DEFAULTS);
   return (
-    <React.Fragment>
-      <CompositionStage width={W} height={H} scenes={window.OM_SCENES} playback={window.OM_PLAYBACK} bg={C.ink}
-        controls={false} exportable={false} persist={false}>
-        <Piece t={t} />
-        <SiteOverlay />
-      </CompositionStage>
-      <TweaksPanel>
-        <TweakSection label="Film" />
-        <TweakToggle label="Motion editor" value={t.motionEditor} onChange={(v) => setTweak('motionEditor', v)} />
-        <TweakToggle label="Captions" value={t.captions} onChange={(v) => setTweak('captions', v)} />
-        <TweakToggle label="Letterbox bars" value={t.letterbox} onChange={(v) => setTweak('letterbox', v)} />
-      </TweaksPanel>
-    </React.Fragment>
+    <CompositionStage width={W} height={H} scenes={window.OM_SCENES} playback={window.OM_PLAYBACK} bg={C.ink}
+      controls={false} exportable={false} persist={false} speed={0.55} fit="cover">
+      <Piece />
+      <SiteUI />
+    </CompositionStage>
   );
 }
 window.ShayakFilm = ShayakFilm;

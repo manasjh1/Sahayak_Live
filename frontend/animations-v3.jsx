@@ -364,6 +364,10 @@ function Stage({
   controls = true,
   exportable = true,
   persist = true,
+  // speed < 1 plays slower (ambient background); fit='cover' fills the
+  // viewport (cropping edges) instead of letterboxing it.
+  speed = 1,
+  fit = 'contain',
   children,
 }) {
   // Props arrive as strings when Stage is mounted via <x-import> (DC
@@ -412,7 +416,8 @@ function Stage({
     const el = stageRef.current;
     const measure = () => {
       const barH = controls ? 44 : 0; // playback bar height
-      const s = Math.min(
+      const fitFn = fit === 'cover' ? Math.max : Math.min;
+      const s = fitFn(
         el.clientWidth / width,
         (el.clientHeight - barH) / height
       );
@@ -426,7 +431,7 @@ function Stage({
       ro.disconnect();
       window.removeEventListener('resize', measure);
     };
-  }, [width, height, controls]);
+  }, [width, height, controls, fit]);
 
   // Passes completed since playback last started. Lives in a ref so the
   // per-frame wrap can count without re-running this effect; reset on
@@ -443,7 +448,8 @@ function Stage({
     passesRef.current = 0;
     const step = (ts) => {
       if (lastTsRef.current == null) lastTsRef.current = ts;
-      const dt = (ts - lastTsRef.current) / 1000;
+      // cap dt so a backgrounded tab doesn't jump the timeline on return
+      const dt = Math.min(0.1, (ts - lastTsRef.current) / 1000) * speed;
       lastTsRef.current = ts;
       setTime((t) => {
         let next = t + dt;
@@ -474,7 +480,7 @@ function Stage({
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       lastTsRef.current = null;
     };
-  }, [playing, duration, loopEff, playTimes]);
+  }, [playing, duration, loopEff, playTimes, speed]);
 
   // Keyboard: space = play/pause, ← → = seek
   React.useEffect(() => {
@@ -1150,7 +1156,9 @@ function CompositionStage(props) {
              autoplay={autoplay} loop={loop} playback={pb}
              controls={props.controls !== false}
              exportable={props.exportable !== false}
-             persist={props.persist !== false}>
+             persist={props.persist !== false}
+             speed={+props.speed || 1}
+             fit={props.fit || 'contain'}>
         <SceneSync raw={raw} onUpdate={setRaw} />
         {typeof praw === 'string' && praw !== '' && (
           <PlaybackSync raw={praw} onUpdate={setPraw} />

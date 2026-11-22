@@ -209,10 +209,10 @@ async def security_headers(request: Request, call_next):
     else:
         # Frontend (film): same policy nginx used to send
         response.headers["Content-Security-Policy"] = FRONTEND_CSP
-        if path == "/" or path.endswith(".html"):
-            response.headers["Cache-Control"] = "no-cache"
-        elif response.status_code == 200:
-            response.headers["Cache-Control"] = "public, max-age=604800"
+        # Always revalidate (ETag/Last-Modified -> cheap 304s) so a deploy is
+        # visible immediately — file names aren't versioned, so long caching
+        # would keep serving old scripts after an update.
+        response.headers["Cache-Control"] = "no-cache"
     # HSTS only in production (requires HTTPS)
     if ENV == "production":
         response.headers["Strict-Transport-Security"] = (
