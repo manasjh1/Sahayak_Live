@@ -21,6 +21,12 @@ PG_PID=""
 # Built-in PostgreSQL — only when DATABASE_URL is not provided
 # ════════════════════════════════════════════════════════════════════
 if [ -z "${DATABASE_URL:-}" ]; then
+  if [ -n "${RENDER:-}" ]; then
+    echo "ERROR: DATABASE_URL is not set. On Render, add it under Environment" >&2
+    echo "(your Supabase Session pooler URI). Built-in Postgres is disabled here" >&2
+    echo "because Render's free tier has no persistent disk." >&2
+    exit 1
+  fi
   : "${POSTGRES_DB:=shayak_waitlist}"
   : "${POSTGRES_USER:=shayak}"
   : "${POSTGRES_PASSWORD:?Set DATABASE_URL (external DB) or POSTGRES_PASSWORD (built-in DB)}"
