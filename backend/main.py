@@ -6,7 +6,7 @@ All HIGH/CRITICAL security issues resolved.
 
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 from fastapi.exception_handlers import request_validation_exception_handler
@@ -381,9 +381,29 @@ if (STATIC_DIR / INDEX_FILE).is_file():
     if _hashes:
         FRONTEND_CSP = FRONTEND_CSP.replace("script-src 'self'", f"script-src 'self' {_hashes}", 1)
 
+    # Cache-busting: tag every local asset URL with a fingerprint of its
+    # contents (?v=<sha>), so a deploy can never mix new HTML with a stale
+    # cached script.
+    def _versioned(match: re.Match) -> str:
+        attr, value = match.group(1), match.group(2)
+        out = []
+        for url in value.split():
+            local = url.split("?")[0].split("#")[0]
+            f = (STATIC_DIR / local.lstrip("./")).resolve()
+            if (
+                not re.match(r"^[a-z]+:", url)
+                and f.is_file()
+                and STATIC_DIR.resolve() in f.parents
+            ):
+                url = f"{local}?v={hashlib.sha256(f.read_bytes()).hexdigest()[:10]}"
+            out.append(url)
+        return f'{attr}="{" ".join(out)}"'
+
+    INDEX_HTML = re.sub(r'\b(src|href|from)="([^"]*)"', _versioned, _html)
+
     @app.get("/", include_in_schema=False)
     async def index():
-        return FileResponse(STATIC_DIR / INDEX_FILE, media_type="text/html")
+        return HTMLResponse(INDEX_HTML)
 
     app.mount("/", StaticFiles(directory=STATIC_DIR), name="static")
     log.info("Serving frontend from %s", STATIC_DIR)
