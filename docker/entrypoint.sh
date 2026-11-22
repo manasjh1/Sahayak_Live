@@ -15,15 +15,18 @@ if [ -z "${DATABASE_URL:-}" ]; then
 fi
 export DATABASE_URL
 
-# nginx listens on $PORT (Render sets PORT, default 10000)
-sed -i "s/listen 80;/listen ${PORT};/" /etc/nginx/nginx.conf
+# nginx is the public listener: 0.0.0.0:$PORT (Render sets PORT, default 10000)
+sed -i -E "s/listen[[:space:]]+[0-9.:]*[0-9]+;/listen 0.0.0.0:${PORT};/" /etc/nginx/nginx.conf
+echo "nginx: $(grep -E '^[[:space:]]*listen' /etc/nginx/nginx.conf | tr -s ' ')"
+nginx -t || { echo "ERROR: nginx config test failed" >&2; exit 1; }
+
+nginx -g 'daemon off;' &
+NGINX_PID=$!
+echo "nginx started on 0.0.0.0:${PORT} (pid $NGINX_PID)"
 
 cd /app
 su-exec appuser uvicorn main:app --host 127.0.0.1 --port 8000 --workers 1 --no-server-header &
 API_PID=$!
-
-nginx -g 'daemon off;' &
-NGINX_PID=$!
 
 stop_all() {
   kill -TERM "$NGINX_PID" "$API_PID" 2>/dev/null || true
