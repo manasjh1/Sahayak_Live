@@ -82,6 +82,22 @@ curl http://localhost/api/waitlist/count
 
 ---
 
+## Single-container mode (< 400 MB)
+
+nginx, FastAPI and PostgreSQL 16 can run in one Alpine-based image
+(`Dockerfile` at the repo root, entrypoint in `docker/entrypoint.sh`):
+
+```bash
+cp .env.example .env            # set POSTGRES_PASSWORD, ADMIN_API_KEY
+docker compose -f docker-compose.single.yml up --build -d
+docker images shayak            # check the size
+```
+
+Data lives in the `postgres_data` volume. If any of the three processes
+dies, the container exits and `restart: unless-stopped` restarts it.
+
+---
+
 ## Useful Commands
 
 ```bash
